@@ -104,12 +104,18 @@ class GeoIn(BaseModel):
 
 
 class ItemSubmit(BaseModel):
-    """Staf mengajukan hasil kerja: catatan + foto bukti + checklist mutu (+ lokasi)."""
+    """Staf mengajukan hasil kerja: catatan + foto bukti + checklist mutu (+ lokasi).
+
+    `client_ref` (Fase 35): penanda dari perangkat untuk antrean offline. Bila pengiriman
+    diulang (sinyal putus lalu antrean dikirim lagi), server MEMUTAR ULANG hasil lama
+    alih-alih membuat pengajuan kedua — jadi bukti tidak pernah dobel.
+    """
     note: str = Field(min_length=10, max_length=1000)
     photo_file_ids: List[str] = []
     document_file_ids: List[str] = []
     checklist: List[ChecklistAnswer] = []
     geo: Optional[GeoIn] = None
+    client_ref: Optional[str] = Field(default=None, max_length=64)
 
 
 class ItemVerify(BaseModel):

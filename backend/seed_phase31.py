@@ -220,6 +220,8 @@ async def ensure_build_indexes():
     await db.build_items.create_index([("org_id", 1), ("project_id", 1), ("status", 1)])
     await db.build_schedules.create_index([("org_id", 1), ("unit_id", 1)])
     await db.build_item_submissions.create_index([("org_id", 1), ("item_id", 1)])
+    await db.build_item_submissions.create_index([("org_id", 1), ("client_ref", 1)],
+                                                unique=True, sparse=True)
     await db.build_policies.create_index([("org_id", 1)], unique=True)
     await db.build_weekly_reports.create_index(
         [("org_id", 1), ("project_id", 1), ("week_key", 1)], unique=True)

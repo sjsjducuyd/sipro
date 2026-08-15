@@ -407,7 +407,11 @@ async def submit_item(item_id: str, payload: ItemSubmit,
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"data": serialize_doc(out["item"]), "warning": out.get("warning"),
-            "message": "Hasil kerja diajukan — menunggu verifikasi supervisor."}
+            "replay": bool(out.get("replay")),
+            "message": ("Pengajuan ini sudah diterima sebelumnya — antrean offline dikirim "
+                        "ulang, tidak dibuat dobel."
+                        if out.get("replay")
+                        else "Hasil kerja diajukan — menunggu verifikasi supervisor.")}
 
 
 @router.post("/items/{item_id}/verify")

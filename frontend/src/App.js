@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ReferenceProvider } from "@/context/ReferenceContext";
+import { OfflineProvider } from "@/context/OfflineContext";
 import AppShell from "@/components/layout/AppShell";
 import Login from "@/pages/Login";
 import Home from "@/pages/Home";
@@ -74,6 +75,7 @@ export default function App() {
   return (
     <AuthProvider>
       <ReferenceProvider>
+      <OfflineProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginRoute />} />
@@ -120,6 +122,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       <Toaster position="top-right" richColors />
+      </OfflineProvider>
       </ReferenceProvider>
     </AuthProvider>
   );

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, MapPin, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CloudOff, MapPin, ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -12,8 +12,10 @@ import Hint from "@/components/construction/BuildHint";
 import PhotoUploader from "@/components/patterns/PhotoUploader";
 import ReferenceSelect from "@/components/patterns/ReferenceSelect";
 import api from "@/services/apiClient";
+import * as sync from "@/services/offlineSync";
+import { useOffline } from "@/context/OfflineContext";
 import useGeoCapture from "@/utils/useGeo";
-import { BUILD } from "@/constants/testIds";
+import { BUILD, OFFLINE } from "@/constants/testIds";
 
 /** Ajukan hasil kerja: catatan + foto bukti + checklist mutu (item kritis wajib lulus). */
 export function SubmitItemDialog({ item, unitCode, open, onOpenChange, onDone }) {
@@ -29,6 +31,9 @@ export function SubmitItemDialog({ item, unitCode, open, onOpenChange, onDone })
     if (!open || !item) return;
     setNote("");
     setPhotos([]);
+    // Satu penanda per pembukaan dialog: klik ganda / kirim ulang antrean tidak
+    // menghasilkan pengajuan dobel (server memutar ulang hasil yang sama).
+    refRef.current = `ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const init = {};
     (item.checklist || []).forEach((c) => {
       init[c.code] = { result: c.result && c.result !== "pending" ? c.result : "", note: c.note || "" };
@@ -81,20 +86,41 @@ export function SubmitItemDialog({ item, unitCode, open, onOpenChange, onDone })
       return;
     }
     setBusy(true);
+    const answersOut = (item.checklist || []).map((c) => ({
+      code: c.code, result: answers[c.code].result, note: answers[c.code].note || null,
+    }));
+    // Fase 35 — offline: pekerjaan TIDAK boleh hilang. Simpan di perangkat, kirim otomatis.
+    const enqueue = async (msg, kind = "success") => {
+      await sync.queueSubmit({ item, note, checklist: answersOut, geo: geo || null,
+        photos });
+      toast[kind](msg);
+      onOpenChange(false);
+      onDone && onDone();
+      setBusy(false);
+    };
+    if (!sync.isOnline()) {
+      await enqueue("Tersimpan di perangkat — terkirim otomatis begitu sinyal kembali. "
+        + "Foto bukti ikut disimpan.");
+      return;
+    }
     try {
       const res = await api.post(`/build/items/${item.id}/submit`, {
         note,
         photo_file_ids: photos,
         geo: geo || null,
-        checklist: (item.checklist || []).map((c) => ({
-          code: c.code, result: answers[c.code].result, note: answers[c.code].note || null,
-        })),
+        checklist: answersOut,
+        client_ref: refRef.current,
       });
       toast.success(res.data?.message || "Hasil kerja diajukan.");
       if (res.data?.warning) toast.warning(res.data.warning);
       onOpenChange(false);
       onDone && onDone();
     } catch (e) {
+      if (!e?.response) {
+        await enqueue("Jaringan terputus saat mengirim — pengajuan disimpan di perangkat dan "
+          + "akan dikirim otomatis. Tidak ada yang hilang.", "warning");
+        return;
+      }
       toast.error(e?.response?.data?.detail || "Gagal mengajukan hasil kerja.");
     } finally { setBusy(false); }
   };
@@ -207,7 +233,8 @@ export function SubmitItemDialog({ item, unitCode, open, onOpenChange, onDone })
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Batal</Button>
           <Button data-testid={BUILD.submitSave} onClick={submit} disabled={busy || !ready}>
-            {busy ? "Mengirim…" : "Ajukan Hasil"}
+            {busy ? (online ? "Mengirim…" : "Menyimpan…")
+              : (online ? "Ajukan Hasil" : "Simpan & kirim nanti")}
           </Button>
         </DialogFooter>
       </DialogContent>

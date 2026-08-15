@@ -57,6 +57,17 @@ def _blocked_message(item: dict) -> str:
 async def submit_item(org: str, item: dict, sched: dict, payload, user: dict) -> dict:
     """Ajukan hasil kerja + bukti. Semua penjaga mutu diperiksa di DATA, bukan di UI saja."""
     actor = user.get("email")
+    # Fase 35 (antrean offline): pengiriman ulang dengan `client_ref` yang sama TIDAK boleh
+    # membuat pengajuan kedua. Tanpa ini, sinyal yang putus di tengah kirim bisa melahirkan
+    # bukti ganda + dua tugas verifikasi untuk pekerjaan yang sama.
+    ref = (getattr(payload, "client_ref", None) or "").strip() or None
+    if ref:
+        prior = await db.build_item_submissions.find_one(
+            {"org_id": org, "client_ref": ref}, {"_id": 0})
+        if prior:
+            fresh = await db.build_items.find_one({"id": prior["item_id"]}, {"_id": 0})
+            logger.info("submit idempoten: client_ref %s sudah diterima", ref)
+            return {"item": fresh, "warning": None, "replay": True}
     if item.get("status") in ("done", "submitted"):
         raise ValueError(_blocked_message(item))
     if item.get("status") == "blocked" and not item.get("override"):
@@ -113,6 +124,7 @@ async def submit_item(org: str, item: dict, sched: dict, payload, user: dict) ->
     # item diajukan ulang): siapa, kapan, di mana, dengan berkas & hash apa.
     await db.build_item_submissions.insert_one({
         "id": new_id(), "org_id": org, "item_id": item["id"],
+        "client_ref": ref,
         "schedule_id": item["schedule_id"], "unit_id": item["unit_id"],
         "unit_code": item.get("unit_code"), "step_code": item.get("step_code"),
         "attempt": int(item.get("rework_count") or 0) + 1,

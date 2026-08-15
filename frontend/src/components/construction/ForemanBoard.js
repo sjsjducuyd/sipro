@@ -11,7 +11,11 @@ import {
   DelayCauseDialog, RejectItemDialog, SubmitItemDialog, VerifyItemDialog,
 } from "@/components/construction/BuildItemDialogs";
 import api from "@/services/apiClient";
-import { BUILD } from "@/constants/testIds";
+import * as sync from "@/services/offlineSync";
+import { useOffline } from "@/context/OfflineContext";
+import OfflineQueuePanel from "@/components/construction/OfflineQueuePanel";
+import { fromNow } from "@/utils/formatters";
+import { BUILD, OFFLINE } from "@/constants/testIds";
 
 /**
  * PAPAN MANDOR — "kerja hari ini" dalam satu layar, nyaman dipakai dari HP.
@@ -47,6 +51,9 @@ const TONE = {
   slate: "border bg-secondary text-muted-foreground",
 };
 
+// Cuplikan papan terakhir (Fase 35) — dipakai saat perangkat kehilangan jaringan.
+const SNAP_KEY = "sipro:board:today";
+
 export default function ForemanBoard({ projectId, focusItemId, onFocusHandled }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +61,8 @@ export default function ForemanBoard({ projectId, focusItemId, onFocusHandled })
   const [openIns, setOpenIns] = useState({});
   const [dialog, setDialog] = useState({ kind: null, item: null });
   const [unitId, setUnitId] = useState(null);
+  const [snapshotAt, setSnapshotAt] = useState(null);
+  const { online, pending } = useOffline();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,11 +70,34 @@ export default function ForemanBoard({ projectId, focusItemId, onFocusHandled })
     try {
       const r = await api.get("/build/board/today",
         { params: { project_id: projectId || undefined } });
-      setData(r.data?.data || null);
+      const fresh = r.data?.data || null;
+      setData(fresh);
+      setSnapshotAt(null);
+      // Fase 35: simpan cuplikan terakhir supaya papan tetap BISA DIBACA di lokasi tanpa
+      // sinyal — lengkap dengan waktunya, jadi tidak menyamar sebagai data terkini.
+      try {
+        localStorage.setItem(SNAP_KEY, JSON.stringify({
+          at: new Date().toISOString(), project_id: projectId || null, data: fresh,
+        }));
+      } catch { /* kuota penuh: papan tetap jalan, hanya tanpa cuplikan */ }
     } catch (e) {
+      if (!e?.response) {
+        try {
+          const raw = localStorage.getItem(SNAP_KEY);
+          const snap = raw ? JSON.parse(raw) : null;
+          if (snap?.data) {
+            setData(snap.data);
+            setSnapshotAt(snap.at);
+            setLoading(false);
+            return;
+          }
+        } catch { /* cuplikan rusak → jatuh ke pesan galat biasa */ }
+      }
       setError(e?.response?.status === 403
         ? "Papan Mandor hanya untuk tim Proyek (pelaksana lapangan, Manajer Proyek, Direksi)."
-        : (e?.response?.data?.detail || "Gagal memuat papan mandor."));
+        : !e?.response
+          ? "Tidak ada jaringan dan belum ada cuplikan papan yang tersimpan di perangkat ini."
+          : (e?.response?.data?.detail || "Gagal memuat papan mandor."));
     } finally { setLoading(false); }
   }, [projectId]);
 
@@ -87,11 +119,24 @@ export default function ForemanBoard({ projectId, focusItemId, onFocusHandled })
   const after = () => { setDialog({ kind: null, item: null }); load(); };
 
   const start = async (row) => {
+    if (!sync.isOnline()) {
+      await sync.queueStart(row);
+      toast.success("Tersimpan di perangkat — status \u201csedang dikerjakan\u201d dikirim otomatis "
+        + "saat sinyal kembali.");
+      return;
+    }
     try {
       await api.post(`/build/items/${row.id}/start`);
       toast.success("Ditandai sedang dikerjakan.");
       load();
-    } catch (e) { toast.error(e?.response?.data?.detail || "Gagal memulai pekerjaan."); }
+    } catch (e) {
+      if (!e?.response) {
+        await sync.queueStart(row);
+        toast.warning("Jaringan terputus — disimpan di perangkat dan dikirim otomatis nanti.");
+        return;
+      }
+      toast.error(e?.response?.data?.detail || "Gagal memulai pekerjaan.");
+    }
   };
 
   if (loading && !data) return <LoadingCards count={3} />;
@@ -104,6 +149,18 @@ export default function ForemanBoard({ projectId, focusItemId, onFocusHandled })
 
   return (
     <div data-testid={BUILD.boardPanel} className="space-y-4">
+      {snapshotAt || (!online && data) ? (
+        <div data-testid={OFFLINE.snapshotNote}
+          className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900">
+          <b>Tampilan offline.</b> Ini cuplikan papan yang tersimpan di perangkat
+          {snapshotAt ? ` — diambil ${fromNow(snapshotAt)}` : ""}. Pekerjaan tetap bisa
+          diajukan; hasilnya terkirim otomatis saat sinyal kembali
+          {pending ? ` (${pending} menunggu terkirim)` : ""}.
+        </div>
+      ) : null}
+
+      <OfflineQueuePanel />
+
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card p-3">
         <div data-testid={BUILD.boardCounts} className="flex flex-wrap items-center gap-2 text-xs">
           <span className="font-semibold">{data.as_of}</span>

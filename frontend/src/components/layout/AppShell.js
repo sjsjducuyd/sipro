@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
+import OfflineBanner from "@/components/patterns/OfflineBanner";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AppShell() {
@@ -27,6 +28,7 @@ export default function AppShell() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar onMenuClick={() => setMobileOpen(true)} />
+        <OfflineBanner />
         <main className="flex-1 overflow-y-auto px-4 py-5 md:px-8 md:py-6">
           <div className="mx-auto max-w-7xl">
             <Outlet />

@@ -35,8 +35,18 @@ export default function PhotoUploader({
 }) {
   const [busy, setBusy] = useState(false);
   const [stats, setStats] = useState({});
+  const [localPrev, setLocalPrev] = useState({});
   const inputRef = useRef(null);
   const camRef = useRef(null);
+
+  // Fase 35 — simpan foto di perangkat saat sinyal hilang, lalu unggah otomatis nanti.
+  const keepLocal = async (f) => {
+    const id = await sync.storePhoto({
+      blob: f, name: f.name, type: f.type, ownerId, watermark, geo,
+    });
+    setLocalPrev((m) => ({ ...m, [id]: URL.createObjectURL(f) }));
+    return id;
+  };
 
   const pick = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -50,10 +60,16 @@ export default function PhotoUploader({
     setBusy(true);
     const added = [];
     const info = {};
+    let stored = 0;
     try {
       for (const f of files.slice(0, room)) {
         if (f.size > MAX_MB * 1024 * 1024) {
           toast.error(`"${f.name}" lebih dari ${MAX_MB}MB — kompres dulu.`);
+          continue;
+        }
+        if (!sync.isOnline()) {
+          added.push(await keepLocal(f));
+          stored += 1;
           continue;
         }
         const fd = new FormData();
@@ -67,22 +83,35 @@ export default function PhotoUploader({
           if (geo.accuracy) fd.append("accuracy", geo.accuracy);
           if (geo.captured_at) fd.append("captured_at", geo.captured_at);
         }
-        const res = await api.post("/files/upload", fd);
-        const rec = res.data?.data;
-        if (rec?.id) {
-          added.push(rec.id);
-          info[rec.id] = { saving: rec.saving_pct || 0, kb: Math.round((rec.size || 0) / 1024),
-            geo: !!rec.geo };
+        try {
+          const res = await api.post("/files/upload", fd);
+          const rec = res.data?.data;
+          if (rec?.id) {
+            added.push(rec.id);
+            info[rec.id] = { saving: rec.saving_pct || 0, kb: Math.round((rec.size || 0) / 1024),
+              geo: !!rec.geo };
+          }
+        } catch (err) {
+          // Tidak ada respons = jaringan putus di tengah jalan → jangan buang fotonya.
+          if (err?.response) throw err;
+          added.push(await keepLocal(f));
+          stored += 1;
         }
       }
       if (added.length) {
         setStats((s) => ({ ...s, ...info }));
         onChange([...value, ...added]);
         const saved = added.map((id) => info[id]?.saving || 0).filter(Boolean);
-        toast.success(saved.length
-          ? `${added.length} foto terunggah · ukuran turun ${Math.round(
-            saved.reduce((a, b) => a + b, 0) / saved.length)}% + watermark tercap.`
-          : `${added.length} foto terunggah.`);
+        if (stored) {
+          toast.success(`${stored} foto disimpan di perangkat — akan terunggah otomatis `
+            + "begitu sinyal kembali.");
+        }
+        if (added.length - stored > 0) {
+          toast.success(saved.length
+            ? `${added.length - stored} foto terunggah · ukuran turun ${Math.round(
+              saved.reduce((a, b) => a + b, 0) / saved.length)}% + watermark tercap.`
+            : `${added.length - stored} foto terunggah.`);
+        }
       }
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Gagal mengunggah foto.");
@@ -137,8 +166,15 @@ export default function PhotoUploader({
           {value.map((id) => (
             <div key={id} data-testid={FIELD.photoThumb}
               className="relative h-20 w-24 overflow-hidden rounded-md border bg-secondary">
-              <img src={photoSrc(id, { variant: "thumb" })} alt="Pratinjau foto lapangan"
-                className="h-full w-full object-cover" />
+              <img src={sync.isLocalPhoto(id) ? (localPrev[id] || "")
+                : photoSrc(id, { variant: "thumb" })}
+                alt="Pratinjau foto lapangan" className="h-full w-full object-cover" />
+              {sync.isLocalPhoto(id) ? (
+                <span data-testid={OFFLINE.photoLocal}
+                  className="absolute left-0 top-0 bg-amber-600/90 px-1 text-[9px] font-semibold text-white">
+                  tersimpan di HP
+                </span>
+              ) : null}
               {stats[id]?.saving ? (
                 <span className="absolute bottom-0 left-0 bg-black/65 px-1 text-[9px] font-semibold text-white">
                   -{stats[id].saving}% · {stats[id].kb}KB

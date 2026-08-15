@@ -21,3 +21,14 @@ root.render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+// Fase 35 — Papan Mandor tahan sinyal hilang: service worker menyimpan kerangka aplikasi
+// supaya mandor tetap bisa membuka/menyegarkan aplikasi di lokasi tanpa sinyal. Strategi
+// network-first (lihat public/service-worker.js) sehingga versi online selalu yang terbaru.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js").catch(() => {
+      /* offline shell hanyalah lapis tambahan; aplikasi tetap jalan tanpanya */
+    });
+  });
+}
