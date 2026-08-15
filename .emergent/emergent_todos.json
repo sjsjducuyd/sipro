@@ -1,0 +1,46 @@
+[
+  {
+    "content": "Restore repo sipro ke /app + .env secrets + dependencies",
+    "status": "completed"
+  },
+  {
+    "content": "Guardrail pasca-restore: 14 gates + poc_31/32/33 HIJAU",
+    "status": "completed"
+  },
+  {
+    "content": "Fase 33: tuntaskan verifikasi end-to-end (iterasi 44 & 45) — LULUS",
+    "status": "completed"
+  },
+  {
+    "content": "Tutup Fase 33 di plan.md + CODEBASE_MAP.md + test_result.md",
+    "status": "completed"
+  },
+  {
+    "content": "Fase 34a/b: mesin + endpoint jadwal massal & geser serentak",
+    "status": "completed"
+  },
+  {
+    "content": "Fase 34c: POC poc_34.py — 57 PASS / 0 FAIL",
+    "status": "completed"
+  },
+  {
+    "content": "Fase 34d: frontend (BulkScheduleDialog, BulkShiftDialog, BulkRunsPanel, ShiftHistoryPanel)",
+    "status": "completed"
+  },
+  {
+    "content": "Fase 34e: gate verify_34.py (40/40) + run_all_gates 15 gates HIJAU",
+    "status": "completed"
+  },
+  {
+    "content": "Fase 34: end-to-end testing (iterasi 46, 47, 48) — LULUS termasuk INV-34-1 terbukti di layar",
+    "status": "completed"
+  },
+  {
+    "content": "Periksa & tindak semua temuan tester (2 false positive dibuktikan, label 'AKSES DITOLAK' ditambah)",
+    "status": "completed"
+  },
+  {
+    "content": "Tutup Fase 34 di plan.md/CODEBASE_MAP/test_result + reset DB ke state demo bersih",
+    "status": "completed"
+  }
+]
